@@ -94,6 +94,8 @@ function ArtifactCollector {
         Write-Verbose -Message 'Determine the PowerShell Version'
         $PowVer = $PSVersionTable.PSVersion.Major
 
+        $Wmic = "$env:windir\System32\Wbem\WMIC.exe"
+
         $EventFilterXml = [xml]@'
 <QueryList>
   <Query Id='0' Path='Security'>
@@ -236,10 +238,21 @@ function ArtifactCollector {
 
                 $SamAccountName = [string]$_.Properties.samaccountname
 
-                <# Commented out until I figure out how to convert SIDs in Constrained Language Mode
+                <# Shelling out to wmic because this doesn't work in Constrained Language Mode:
                 $objAct = New-Object System.Security.Principal.NTAccount("$SamAccountName")
                 $objSID = $objAct.Translate([System.Security.Principal.SecurityIdentifier])
                 $SID = [string]$objSID.Value
+                #>
+
+                <# Commenting out because, as it turns out, shelling out to wmic slows things down a lot.
+                $UserSidWmicQuery = "(name='$SamAccountName' and domain='$env:USERDOMAIN')"
+                $UserSidWmicResponse = &$Wmic useraccount where $UserSidWmicQuery get name,sid /format:csv |
+                    Where-Object { $_ -and $_ -notmatch 'No\ Instance\(s\)\ Available\.' }
+                if ($UserSidWmicResponse) {
+                    $SID = $UserSidWmicResponse | ConvertFrom-Csv | Select-Object -ExpandProperty SID
+                } else {
+                    $SID = '-'
+                } #if $UserSidWmicResponse
                 #>
 
                 $MemberOf = $_.Properties.memberof | ForEach-Object {
@@ -253,7 +266,7 @@ function ArtifactCollector {
                 New-Object -TypeName psobject -Property @{
                     SamAccountName = $SamAccountName
                     UserPrincipalName = [string]$_.Properties.userprincipalname
-                    #SID = $SID
+                    #SID = [string]$SID
                     DistinguishedName = [string]$_.Properties.distinguishedname
                     Description = [string]$_.Properties.description
                     MemberOf = $MemberOf
