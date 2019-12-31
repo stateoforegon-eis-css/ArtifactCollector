@@ -829,12 +829,14 @@ function ArtifactCollector {
         Write-Verbose -Message 'Gathering WEC Configuration From the Registry'
         $SubManPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\EventLog\EventForwarding\SubscriptionManager'
         $HasWecPolicy = Get-ItemPropertyValue -Path $SubManPath -Name '1' -ErrorAction SilentlyContinue
+        $WefLogName = 'Microsoft-Windows-Forwarding/Operational'
 
         if ($HasWecPolicy) {
 
             New-Item -Path .\$DirName -ItemType Directory | Out-Null
             $HasWecPolicy = $HasWecPolicy.Split('=')[-1].Trim()
             $HasWecPolicy | Out-File -FilePath .\$DirName\WecServer.txt
+            Get-WinEvent -LogName $WefLogName | Export-Clixml -Path .\$DirName\WefEvents.xml
 
         } #if
         ### endregion WEC ###
