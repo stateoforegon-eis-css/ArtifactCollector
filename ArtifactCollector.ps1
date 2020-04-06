@@ -94,7 +94,7 @@ function ArtifactCollector {
         Write-Verbose -Message 'Determine the PowerShell Version'
         $PowVer = $PSVersionTable.PSVersion.Major
 
-        $Wmic = "$env:windir\System32\Wbem\WMIC.exe"
+        #$Wmic = "$env:windir\System32\Wbem\WMIC.exe"
 
         $EventFilterXml = [xml]@'
 <QueryList>
@@ -371,8 +371,8 @@ function ArtifactCollector {
 
             Write-Verbose -Message 'Start gathering OUs'
             $OuSearcher = New-Object -TypeName System.DirectoryServices.DirectorySearcher
-            $GpoSearcher.Filter = "(objectCategory=organizationalUnit)"
-            $OUs = $GpoSearcher.FindAll() | ForEach-Object {
+            $OuSearcher.Filter = "(objectCategory=organizationalUnit)"
+            $OUs = $OuSearcher.FindAll() | ForEach-Object {
 
                 $GpLink = [string]$_.Properties.gplink
 
@@ -473,7 +473,7 @@ function ArtifactCollector {
                     $ErrorActionPreferenceBak = $ErrorActionPreference
                     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
-                    $DcLogs = try {
+                    try {
 
                         $Params = @{
                             Activity = 'Active Directory: Gathering Event Logs'
