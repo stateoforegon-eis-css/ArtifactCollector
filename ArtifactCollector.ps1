@@ -191,6 +191,7 @@ function ArtifactCollector {
 
     } # $DomainControllers
 
+
 # Step 1: Getting all servers from AD 
 Write-Host 'Searching for Web Hosting Services'
 $WHSearcher = New-Object System.DirectoryServices.DirectorySearcher
@@ -273,7 +274,7 @@ $ComputerSearcher.Filter = "(objectClass=computer)"
 $ComputerSearcher.PropertiesToLoad.AddRange(@(
     "name", "distinguishedName", "description", "servicePrincipalName", "memberOf",
     "operatingSystem", "operatingSystemHotfix", "operatingSystemServicePack",
-    "operatingSystemVersion", "whenCreated", "lastLogonTimestamp", "lastLogon", "userAccountControl"
+    "operatingSystemVersion", "whenCreated", "modifyTimestamp", "whenChanged", "lastLogonTimestamp", "lastLogon", "userAccountControl"
 ))
 
 $Computers = $ComputerSearcher.FindAll() | ForEach-Object {
@@ -288,6 +289,8 @@ $Computers = $ComputerSearcher.FindAll() | ForEach-Object {
         MemberOf           = $props.memberof
         whenCreated        = [string]$props.whencreated
         LastLogon          = [string]$props.lastlogon
+        whenChanged        = [string]$props.whenChanged
+        modifyTimestamp    = [string]$props.modifyTimestamp
         LastLogonTimestamp = [string]$props.lastlogontimestamp
         Enabled            = if ($props.useraccountcontrol) {
                                 -not ([bool]($props.useraccountcontrol[0] -band 0x2))
