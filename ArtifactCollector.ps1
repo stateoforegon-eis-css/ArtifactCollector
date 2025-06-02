@@ -348,6 +348,7 @@ foreach ($Result in $Results) {
         PasswordNotRequired   = ([bool]($User["useraccountcontrol"][0] -band 0x20))
         PasswordNeverExpires  = ([bool]($User["useraccountcontrol"][0] -band 0x10000))
         PasswordLastSet       = ([datetime]::FromFileTimeUTC($User["pwdlastset"][0]))
+        Enabled = if (($User["useraccountcontrol"][0] -band 0x2) -eq 0x2) { "False" } else { "True" }
     }
 }
 
