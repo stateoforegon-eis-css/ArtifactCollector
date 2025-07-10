@@ -206,7 +206,7 @@ $Servers = $WHSearcher.FindAll() | ForEach-Object {
 # Step 2: Check remotely for known web services (IIS, Apache, Tomcat, etc.)
 $WebHosting = foreach ($Server in $Servers) {
     try {
-        $Services = Get-WmiObject -Class Win32_Service -ComputerName $Server -ErrorAction Stop |
+        $Services = Get-CimInstance -Class Win32_Service -ComputerName $Server -ErrorAction Stop |
                     Where-Object { $_.Name -match "IIS|Apache|Tomcat|HTTPD|nginx|wamp|xampp|glassfish|jetty|resin|coldfusion|websphere|jboss|wildfly" }
 
         if ($Services) {
