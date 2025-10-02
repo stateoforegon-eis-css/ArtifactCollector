@@ -1081,5 +1081,5 @@ foreach ($Result in $Results) {
 } #ArtifactCollector
 
 # Execute the ArtifactCollector function
-ArtifactCollector 3>> $env:USERPROFILE\Downloads\\ArtifactCollectorWarnings.log
+ArtifactCollector 3>> $env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log
 Remove-Item -Path $env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log -Force
