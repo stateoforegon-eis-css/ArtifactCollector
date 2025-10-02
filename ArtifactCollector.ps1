@@ -126,8 +126,6 @@ function ArtifactCollector {
 
     process {
 
-        $WarningPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-
         ### region Prep ###
 
         $acy = Read-Host -Prompt "Agency acronym: "
@@ -195,7 +193,7 @@ function ArtifactCollector {
 
 
 # Step 1: Getting all servers from AD 
-Write-Host 'Searching for Web Hosting Services'
+Write-Verbose -Message 'Searching for Web Hosting Services'
 $WHSearcher = New-Object System.DirectoryServices.DirectorySearcher
 $WHSearcher.Filter = "(&(objectClass=computer)(operatingSystem=*server*))"
 $WHSearcher.PropertiesToLoad.Add("dnshostname") | Out-Null
@@ -997,6 +995,13 @@ foreach ($Result in $Results) {
         } | Export-Clixml -Path .\Baseline.xml
         ### endregion Baseline ###
 
+        # Copy ArtifactCollectorWarnings.log to the artifact directory
+        $WarningsLogPath = "$env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log"
+        # Copy the log file if it exists
+        if (Test-Path $WarningsLogPath) {
+        Copy-Item -Path $WarningsLogPath -Destination $ArtifactDir -Force
+        }
+
         ### region ZIP ###
         if ($PowVer -ge 5) {
 
@@ -1072,10 +1077,9 @@ foreach ($Result in $Results) {
             Path = $ArtifactZip.FullName
             Comment = "Please arrange to get the '$($ArtifactZip.Name)' file to the assessment team."
         }
-
     } #end
-
 } #ArtifactCollector
 
 # Execute the ArtifactCollector function
-ArtifactCollector
+ArtifactCollector 3>> $env:USERPROFILE\Downloads\\ArtifactCollectorWarnings.log
+Remove-Item -Path $env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log -Force
