@@ -126,6 +126,8 @@ function ArtifactCollector {
 
     process {
 
+        $WarningPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
+
         ### region Prep ###
 
         $acy = Read-Host -Prompt "Agency acronym: "
