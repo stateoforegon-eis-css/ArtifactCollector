@@ -348,6 +348,7 @@ foreach ($Result in $Results) {
         PasswordNotRequired   = ([bool]($User["useraccountcontrol"][0] -band 0x20))
         PasswordNeverExpires  = ([bool]($User["useraccountcontrol"][0] -band 0x10000))
         PasswordLastSet       = ([datetime]::FromFileTimeUTC($User["pwdlastset"][0]))
+        SmartcardLogonRequired = ([bool]($User["useraccountcontrol"][0] -band 0x40000))
         Enabled = if (($User["useraccountcontrol"][0] -band 0x2) -eq 0x2) { "False" } else { "True" }
     }
 }
@@ -1082,4 +1083,5 @@ foreach ($Result in $Results) {
 
 # Execute the ArtifactCollector function
 ArtifactCollector 3>> $env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log
+
 Remove-Item -Path $env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log -Force
