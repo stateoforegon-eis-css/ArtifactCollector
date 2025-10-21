@@ -128,7 +128,7 @@ function ArtifactCollector {
 
         ### region Prep ###
 
-        $acy = Read-Host -Prompt "Agency acronym: "
+        $acy = Read-Host -Prompt "Agency acronym"
 
         #Write-Verbose -Message 'Set dotnet to use TLS 1.2'
         #[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
@@ -1090,3 +1090,4 @@ foreach ($Result in $Results) {
 # Execute the ArtifactCollector function
 ArtifactCollector 3>> $env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log
 Remove-Item -Path $env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log -Force
+
