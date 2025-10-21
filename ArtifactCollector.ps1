@@ -425,7 +425,7 @@ foreach ($Result in $Results) {
                 }
 
                 Write-Progress @Params
-
+            
             } # $GroupPolicies
 
             Write-Verbose -Message 'Create a hashtable to translate GPO GUIDs to names'
@@ -441,7 +441,7 @@ foreach ($Result in $Results) {
 
             } # $PowVer
 
-            Write-Verbose -Message 'Start gathering OUs'
+             Write-Verbose -Message 'Start gathering OUs'
             $OuSearcher = New-Object -TypeName System.DirectoryServices.DirectorySearcher
             $OuSearcher.Filter = "(objectCategory=organizationalUnit)"
             $OUs = $OuSearcher.FindAll() | ForEach-Object {
@@ -461,20 +461,17 @@ foreach ($Result in $Results) {
                         $EnforcedString = [string]$_.Split(';')[-1].Trim(']')
                         $EnforcedInt = [int]$EnforcedString
 
-                        if ($EnforcedInt -eq 0) {
-
-                            $Enforced = $false
-
-                        } elseif ($EnforcedInt -eq 1) {
-
-                            $Enforced = $true
-
+                        $status = switch ($EnforcedInt) {
+                            0 {"Enabled, Not Enforced"}
+                            1 {"Disabled"}
+                            2 {"Enabled, Enforced"}
+                            3 {"Disabled, Enforced"}
                         }
 
                         New-Object -TypeName psobject -Property @{
                             Name = $Name
                             Guid = $Guid
-                            Enforced = $Enforced
+                            LinkOptions = $status
                         }
 
                     } # $LinkedGPOs
@@ -591,19 +588,20 @@ foreach ($Result in $Results) {
                 }
 
                 Write-Progress @Params
-
+                                
             } # $GroupPolicies
+
+            # Extract GPO Details
+                $GPODetails = (Get-ADOrganizationalUnit -filter * | Get-GPInheritance).GpoLinks | 
+                Select-Object -Property GpoId,Target,DisplayName,Enabled,Enforced,Order
+
+                # Export to Excel
+                $xlsxPath = ".\$DirName\GPODetails.csv"
+                $GPODetails | Export-CSV $xlsxPath -NoTypeInformation
+
             ### endregion GPO ###
 
         } #if ($DomainJoined)
-
-        # Extract GPO Details
-        $GPODetails = (Get-ADOrganizationalUnit -filter * | Get-GPInheritance).GpoLinks | 
-        Select-Object -Property GpoId,Target,DisplayName,Enabled,Enforced,Order
-
-        # Export to Excel
-        $xlsxPath = ".\$DirName\GPODetails.csv"
-        $GPODetails | Export-CSV $xlsxPath -NoTypeInformation
 
         ### region PDQ ###
         $DirName = 'PDQ'
@@ -1091,6 +1089,4 @@ foreach ($Result in $Results) {
 
 # Execute the ArtifactCollector function
 ArtifactCollector 3>> $env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log
-
 Remove-Item -Path $env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log -Force
-
