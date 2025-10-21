@@ -597,6 +597,14 @@ foreach ($Result in $Results) {
 
         } #if ($DomainJoined)
 
+        # Extract GPO Details
+        $GPODetails = (Get-ADOrganizationalUnit -filter * | Get-GPInheritance).GpoLinks | 
+        Select-Object -Property GpoId,Target,DisplayName,Enabled,Enforced,Order
+
+        # Export to Excel
+        $xlsxPath = ".\$DirName\GPODetails.csv"
+        $GPODetails | Export-CSV $xlsxPath -NoTypeInformation
+
         ### region PDQ ###
         $DirName = 'PDQ'
 
@@ -1085,3 +1093,4 @@ foreach ($Result in $Results) {
 ArtifactCollector 3>> $env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log
 
 Remove-Item -Path $env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log -Force
+
