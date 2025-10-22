@@ -454,13 +454,15 @@ foreach ($Result in $Results) {
                     Write-Verbose -Message 'Linked GPOs detected'
 
                     Write-Verbose -Message 'Parsing gplink [string] into [psobject[]]'
+                    $Order = 1
                     $LinkedGPOs = $GpLink.Split('][') | Where-Object { $_ -imatch 'cn=' } | ForEach-Object {
 
                         $Guid = $_.Split(';')[0].Trim('[').Split(',')[0] -ireplace 'LDAP://cn='
                         $Name = $GpHt[$Guid].Name
                         $EnforcedString = [string]$_.Split(';')[-1].Trim(']')
                         $EnforcedInt = [int]$EnforcedString
-
+                        $LinkOrder = $Order
+                        
                         $status = switch ($EnforcedInt) {
                             0 {"Enabled, Not Enforced"}
                             1 {"Disabled"}
@@ -472,10 +474,11 @@ foreach ($Result in $Results) {
                             Name = $Name
                             Guid = $Guid
                             LinkOptions = $status
+                            LinkOrder = $LinkOrder
                         }
-
+                        $Order++
                     } # $LinkedGPOs
-
+                    
                 } elseif (-not $GpLink) {
 
                     $LinkedGPOs = $null
@@ -509,7 +512,7 @@ foreach ($Result in $Results) {
                 }
 
                 Write-Progress @Params
-
+            
             } # $OUs
 
             $AdInfo = New-Object -TypeName psobject -Property @{
@@ -591,13 +594,32 @@ foreach ($Result in $Results) {
                                 
             } # $GroupPolicies
 
-            # Extract GPO Details
-                $GPODetails = (Get-ADOrganizationalUnit -filter * | Get-GPInheritance).GpoLinks | 
-                Select-Object -Property GpoId,Target,DisplayName,Enabled,Enforced,Order
+            ### Export GPO Details to CSV ###
+            
+            $GpoCsvPath = ".\$DirName\OU-GPO-Details.csv"
 
-                # Export to Excel
-                $xlsxPath = ".\$DirName\GPODetails.csv"
-                $GPODetails | Export-CSV $xlsxPath -NoTypeInformation
+            # Create a collection to hold all OU–GPO link details
+            $OuGpoExport = @()
+
+            foreach ($OU in $OUs) {
+                if ($OU.LinkedGPOs) {
+                    $Order = 1
+                    foreach ($Gpo in $OU.LinkedGPOs) {
+                        $OuGpoExport += [PSCustomObject]@{
+                            OUName             = $OU.Name
+                            DistinguishedName  = $OU.DistinguishedName
+                            GPOName            = $Gpo.Name
+                            Guid               = $Gpo.Guid
+                            LinkOptions        = $Gpo.LinkOptions
+                            LinkOrder          = $Order
+                        }
+                        $Order++
+                    }
+                }
+            }
+
+            # Export the results to CSV
+            $OuGpoExport | Sort-Object OUName, LinkOrder | Export-Csv -Path $GpoCsvPath -NoTypeInformation -Encoding UTF8
 
             ### endregion GPO ###
 
@@ -1090,4 +1112,3 @@ foreach ($Result in $Results) {
 # Execute the ArtifactCollector function
 ArtifactCollector 3>> $env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log
 Remove-Item -Path $env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log -Force
-
