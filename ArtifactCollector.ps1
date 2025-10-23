@@ -441,7 +441,7 @@ foreach ($Result in $Results) {
 
             } # $PowVer
 
-             Write-Verbose -Message 'Start gathering OUs'
+            Write-Verbose -Message 'Start gathering OUs'
             $OuSearcher = New-Object -TypeName System.DirectoryServices.DirectorySearcher
             $OuSearcher.Filter = "(objectCategory=organizationalUnit)"
             $OUs = $OuSearcher.FindAll() | ForEach-Object {
@@ -579,19 +579,33 @@ foreach ($Result in $Results) {
 
             ### region GPO ###
             $DirName = 'GPO'
-            New-Item -Path .\$DirName -ItemType Directory | Out-Null
+            New-Item -Path .\$DirName -ItemType Directory -Force | Out-Null
+            $DisabledDirName = 'GPOsDisabled'
+            New-Item -Path .\$DisabledDirName -ItemType Directory -Force | Out-Null
 
-            $GroupPolicies | Get-Item | ForEach-Object {
+            ### Export GPOs to folders based on LinkOptions (Disabled-Enabled) ###
+            foreach ($OU in $OUs) {
+                if ($OU.LinkedGPOs) {
+                    foreach ($GpoLink in $OU.LinkedGPOs) {
+                        $Gpo = $GroupPolicies | Where-Object { $_.Guid -eq $GpoLink.Guid }
+                        if ($Gpo) {
+                            $Destination = if ($GpoLink.LinkOptions -like "*Disabled*") { ".\$DisabledDirName" } else { ".\$DirName" }
+                            
+                            try {
+                                Copy-Item -Path $Gpo.Path -Destination $Destination -Recurse -ErrorAction SilentlyContinue
+                            } catch {
+                                Write-Warning "Failed to copy GPO $($Gpo.Name) to $Destination"
+                            }
 
-                $_ | Copy-Item -Recurse -Destination .\$DirName\ -ErrorAction SilentlyContinue
-
-                $Params = @{
-                    Activity = 'Active Directory: Copying GPOs'
-                    Status = "Now Processing: $($GpHt[$($_.Name)].Name)"
+                            # Progress display
+                            $Params = @{
+                                Activity = 'Active Directory: Copying GPOs'
+                                Status   = "Now Processing: $($Gpo.Name)"
+                            }
+                            Write-Progress @Params
+                        }
+                    }
                 }
-
-                Write-Progress @Params
-                                
             } # $GroupPolicies
 
             ### Export GPO Details to CSV ###
