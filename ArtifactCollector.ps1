@@ -145,83 +145,127 @@ function ArtifactCollector {
         $DomainJoined = $ComputerSystem.PartOfDomain
         ### endregion Prep ###
 
-        ### region AD ###
+    ### SUB-DOMAIN WARNING CHECK – MUST RUN FROM FOREST ROOT FOR BEST RESULTS ###
 
-        if ($DomainJoined) {
+    try {
+        # Current domain the computer is joined to
+        $CurrentDomain = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters")."Domain"
 
-            $ConfigRoot = ([adsi]"LDAP://RootDSE").configurationNamingContext
-            $DefaultNC = ([adsi]"LDAP://RootDSE").defaultNamingContext
+        # Forest root domain via LDAP query to RootDSE
+        $RootDSE = [ADSI]"LDAP://RootDSE"
+        $ForestRootDN = $RootDSE.rootDomainNamingContext
+        $ForestRootDomain = ($ForestRootDN -replace 'DC=','' -replace ',','.').ToLower()
 
-            Write-Verbose -Message 'Get a list of domain controllers'
-            $DcSearcher = New-Object -TypeName System.DirectoryServices.DirectorySearcher
-            $DcSearcher.SearchRoot = "LDAP://$DefaultNC"
-            $DcSearcher.Filter = "(primaryGroupID=516)"
-            $DcSearcher.PropertiesToLoad.Add("dnshostname") | Out-Null
-            $DcSearcher.PropertiesToLoad.Add("name") | Out-Null
+        # Compare (case-insensitive)
+        if ($CurrentDomain.ToLower() -ne $ForestRootDomain) {
+            Clear-Host
+            Write-Host @"
 
-            $DomainControllers = $DcSearcher.FindAll() | ForEach-Object {
+    `n`n`n
+    =====================================================================
+            WARNING!!! YOU ARE RUNNING FROM A SUB-DOMAIN
+    =====================================================================
 
-                $HostName = $_.Properties["dnshostname"] | Select-Object -First 1
-                $Name     = $_.Properties["name"] | Select-Object -First 1
+    You are running Artifact Collector from a sub domain.
 
-                $IP = $null
-                if ($HostName) {
-                    try {
-                        $IP = [System.Net.Dns]::GetHostAddresses($HostName) |
-                            Where-Object { $_.AddressFamily -eq 'InterNetwork' } |
-                            Select-Object -First 1
-                    } catch {
-                        Write-Warning "Failed to resolve IP for $HostName"
-                    }
-                }
+    Current domain               : $CurrentDomain
+    Top level domain (forest root): $ForestRootDomain
 
-                # Show progress
-                $Params = @{
-                    Activity = 'Active Directory: Enumerating Domain Controllers'
-                    Status   = "Now Processing: $Name ($HostName)"
-                }
-                Write-Progress @Params
+    Either Ctrl-C to stop script and re-run from within the top level domain 
+    ($ForestRootDomain) or press enter to continue capturing data from $CurrentDomain.
 
-                # Output as object for collection
-                [PSCustomObject]@{
-                    Name       = $Name
-                    DNSHost    = $HostName
-                    IPAddress  = $IP.IPAddressToString
-                }
+    =====================================================================
+"@ -ForegroundColor Yellow
 
-            } # $DomainControllers
+    Read-Host "          Press ENTER to continue or Ctrl-C to abort"
+    Write-Host "`nContinuing..." -ForegroundColor Cyan
+    Start-Sleep -Seconds 30
+}
+    }
+    catch {
+        # If anything fails (offline, permissions, etc.) skip the warning silently
+        Write-Verbose "Could not determine forest root domain (LDAP/Registry), skipping sub-domain warning."
+    } ### End SUB-DOMAIN CHECK
 
+  ### region AD ###
 
-            # Step 1: Getting all servers from AD 
-            Write-Verbose -Message 'Searching for Web Hosting Services'
-            $WHSearcher = New-Object System.DirectoryServices.DirectorySearcher
-            $WHSearcher.Filter = "(&(objectClass=computer)(operatingSystem=*server*))"
-            $WHSearcher.PropertiesToLoad.Add("dnshostname") | Out-Null
-            $WHSearcher.SearchScope = "Subtree"
+      if ($DomainJoined) {
 
-            $Servers = $WHSearcher.FindAll() | ForEach-Object {
-                $_.Properties["dnshostname"][0]
+      $ConfigRoot = ([adsi]"LDAP://RootDSE").configurationNamingContext
+    $DefaultNC = ([adsi]"LDAP://RootDSE").defaultNamingContext
+
+    Write-Verbose -Message 'Get a list of domain controllers'
+    $DcSearcher = New-Object -TypeName System.DirectoryServices.DirectorySearcher
+    $DcSearcher.SearchRoot = "LDAP://$DefaultNC"
+    $DcSearcher.Filter = "(primaryGroupID=516)"
+    $DcSearcher.PropertiesToLoad.Add("dnshostname") | Out-Null
+    $DcSearcher.PropertiesToLoad.Add("name") | Out-Null
+
+    $DomainControllers = $DcSearcher.FindAll() | ForEach-Object {
+
+        $HostName = $_.Properties["dnshostname"] | Select-Object -First 1
+        $Name     = $_.Properties["name"] | Select-Object -First 1
+
+        $IP = $null
+        if ($HostName) {
+            try {
+                $IP = [System.Net.Dns]::GetHostAddresses($HostName) |
+                      Where-Object { $_.AddressFamily -eq 'InterNetwork' } |
+                      Select-Object -First 1
+            } catch {
+                Write-Warning "Failed to resolve IP for $HostName"
             }
+        }
 
-            # Step 2: Check remotely for known web services (IIS, Apache, Tomcat, etc.)
-            $WebHosting = foreach ($Server in $Servers) {
-                try {
-                    $Services = Get-CimInstance -Class Win32_Service -ComputerName $Server -ErrorAction Stop |
-                                Where-Object { $_.Name -match "IIS|Apache|Tomcat|HTTPD|nginx|wamp|xampp|glassfish|jetty|resin|coldfusion|websphere|jboss|wildfly" }
+        # Show progress
+        $Params = @{
+            Activity = 'Active Directory: Enumerating Domain Controllers'
+            Status   = "Now Processing: $Name ($HostName)"
+        }
+        Write-Progress @Params
 
-                    if ($Services) {
-                        [PSCustomObject]@{
-                            Server   = $Server
-                            Services = $Services.DisplayName -join ", "
-                        }
-                    }
-                } catch {
-                    $ErrorMessage = $_.Exception.Message
-                    Write-Warning "Could not query ${Server}: $ErrorMessage"
-                }
+        # Output as object for collection
+        [PSCustomObject]@{
+            Name       = $Name
+            DNSHost    = $HostName
+            IPAddress  = $IP.IPAddressToString
+        }
+
+    } # $DomainControllers
+
+
+# Step 1: Getting all servers from AD 
+Write-Verbose -Message 'Searching for Web Hosting Services'
+$WHSearcher = New-Object System.DirectoryServices.DirectorySearcher
+$WHSearcher.Filter = "(&(objectClass=computer)(operatingSystem=*server*))"
+$WHSearcher.PropertiesToLoad.Add("dnshostname") | Out-Null
+$WHSearcher.SearchScope = "Subtree"
+
+$Servers = $WHSearcher.FindAll() | ForEach-Object {
+    $_.Properties["dnshostname"][0]
+}
+
+# Step 2: Check remotely for known web services (IIS, Apache, Tomcat, etc.)
+$WebHosting = foreach ($Server in $Servers) {
+    try {
+        $Services = Get-CimInstance -Class Win32_Service -ComputerName $Server -ErrorAction Stop |
+                    Where-Object { $_.Name -match "IIS|Apache|Tomcat|HTTPD|nginx|wamp|xampp|glassfish|jetty|resin|coldfusion|websphere|jboss|wildfly" }
+
+        if ($Services) {
+            [PSCustomObject]@{
+                Server   = $Server
+                Services = $Services.DisplayName -join ", "
             }
+        }
+    } catch {
+        $ErrorMessage = $_.Exception.Message
+        Write-Warning "Could not query ${Server}: $ErrorMessage"
+    }
+}
 
-            # $WebHosting
+# $WebHosting
+
+
             Write-Verbose -Message 'Get a list of DHCP servers from ActiveDirectory'
             $DhcpSearcher = New-Object -TypeName System.DirectoryServices.DirectorySearcher
             $DhcpSearcher.Filter = "(&(objectClass=dhcpclass)(!(name=DhcpRoot)))"
@@ -265,91 +309,91 @@ function ArtifactCollector {
 
             } # $Subnets
 
-            Write-Verbose -Message 'Start gathering computers'
+Write-Verbose -Message 'Start gathering computers'
 
-            $ComputerSearcher = New-Object -TypeName System.DirectoryServices.DirectorySearcher
-            $ComputerSearcher.Filter = "(objectClass=computer)"
-            $ComputerSearcher.PropertiesToLoad.AddRange(@(
-                "name", "distinguishedName", "description", "servicePrincipalName", "memberOf",
-                "operatingSystem", "operatingSystemHotfix", "operatingSystemServicePack",
-                "operatingSystemVersion", "whenCreated", "modifyTimestamp", "whenChanged", "lastLogonTimestamp", "lastLogon", "userAccountControl"
-            ))
+$ComputerSearcher = New-Object -TypeName System.DirectoryServices.DirectorySearcher
+$ComputerSearcher.Filter = "(objectClass=computer)"
+$ComputerSearcher.PropertiesToLoad.AddRange(@(
+    "name", "distinguishedName", "description", "servicePrincipalName", "memberOf",
+    "operatingSystem", "operatingSystemHotfix", "operatingSystemServicePack",
+    "operatingSystemVersion", "whenCreated", "modifyTimestamp", "whenChanged", "lastLogonTimestamp", "lastLogon", "userAccountControl"
+))
 
-            $Computers = $ComputerSearcher.FindAll() | ForEach-Object {
-                $props = $_.Properties
+$Computers = $ComputerSearcher.FindAll() | ForEach-Object {
+    $props = $_.Properties
 
-                New-Object -TypeName psobject -Property @{
-                    ComputerName       = [string]$props.name
-                    OperatingSystem    = [string]$props.operatingsystem
-                    DistinguishedName  = [string]$props.distinguishedname
-                    Description        = [string]$props.description
-                    ServicePrincipalName = $props.serviceprincipalname
-                    MemberOf           = $props.memberof
-                    whenCreated        = [string]$props.whencreated
-                    LastLogon          = [string]$props.lastlogon
-                    whenChanged        = [string]$props.whenChanged
-                    modifyTimestamp    = [string]$props.modifyTimestamp
-                    LastLogonTimestamp = [string]$props.lastlogontimestamp
-                    Enabled            = if ($props.useraccountcontrol) {
-                                            -not ([bool]($props.useraccountcontrol[0] -band 0x2))
-                                        } else { $null }
-                    OS                 = [string]$props.operatingsystem
-                    OSHotFix           = [string]$props.operatingsystemhotfix
-                    OSServicePack      = [string]$props.operatingsystemservicepack
-                    OSVersion          = [string]$props.operatingsystemversion        
-                }
+    New-Object -TypeName psobject -Property @{
+        ComputerName       = [string]$props.name
+        OperatingSystem    = [string]$props.operatingsystem
+        DistinguishedName  = [string]$props.distinguishedname
+        Description        = [string]$props.description
+        ServicePrincipalName = $props.serviceprincipalname
+        MemberOf           = $props.memberof
+        whenCreated        = [string]$props.whencreated
+        LastLogon          = [string]$props.lastlogon
+        whenChanged        = [string]$props.whenChanged
+        modifyTimestamp    = [string]$props.modifyTimestamp
+        LastLogonTimestamp = [string]$props.lastlogontimestamp
+        Enabled            = if ($props.useraccountcontrol) {
+                                -not ([bool]($props.useraccountcontrol[0] -band 0x2))
+                             } else { $null }
+        OS                 = [string]$props.operatingsystem
+        OSHotFix           = [string]$props.operatingsystemhotfix
+        OSServicePack      = [string]$props.operatingsystemservicepack
+        OSVersion          = [string]$props.operatingsystemversion        
+    }
 
-                $Params = @{
-                    Activity = 'Active Directory: Enumerating Computers'
-                    Status   = "Now Processing: $([string]$props.name)"
-                }
-                Write-Progress @Params
-            } #$Computers
+    $Params = @{
+        Activity = 'Active Directory: Enumerating Computers'
+        Status   = "Now Processing: $([string]$props.name)"
+    }
+    Write-Progress @Params
+}
 
-            Write-Verbose -Message 'Start gathering users'
-            # Create Directory Entry for LDAP root
-            $Root = New-Object DirectoryServices.DirectoryEntry("LDAP://RootDSE")
-            $SearchBase = "LDAP://" + $Root.defaultNamingContext
+Write-Verbose -Message 'Start gathering users'
+# Create Directory Entry for LDAP root
+$Root = New-Object DirectoryServices.DirectoryEntry("LDAP://RootDSE")
+$SearchBase = "LDAP://" + $Root.defaultNamingContext
 
-            # Set up Directory Searcher
-            $Searcher = New-Object DirectoryServices.DirectorySearcher([ADSI]$SearchBase)
-            $Searcher.Filter = "(&(objectCategory=person)(objectClass=user))"
-            $Searcher.PageSize = 1000
+# Set up Directory Searcher
+$Searcher = New-Object DirectoryServices.DirectorySearcher([ADSI]$SearchBase)
+$Searcher.Filter = "(&(objectCategory=person)(objectClass=user))"
+$Searcher.PageSize = 1000
 
-            # Define properties to load
-            $Properties = @(
-                "sAMAccountName", "whenCreated", "memberOf", "name", "userPrincipalName",
-                "description", "createTimeStamp", "distinguishedName", "pwdLastSet",
-                "whenChanged", "lastLogonTimestamp", "userAccountControl"
-            )
-            foreach ($prop in $Properties) { $Searcher.PropertiesToLoad.Add($prop) | Out-Null }
+# Define properties to load
+$Properties = @(
+    "sAMAccountName", "whenCreated", "memberOf", "name", "userPrincipalName",
+    "description", "createTimeStamp", "distinguishedName", "pwdLastSet",
+    "whenChanged", "lastLogonTimestamp", "userAccountControl"
+)
+foreach ($prop in $Properties) { $Searcher.PropertiesToLoad.Add($prop) | Out-Null }
 
-            # Collect users
-            $Users = @()
-            $Results = $Searcher.FindAll()
+# Collect users
+$Users = @()
+$Results = $Searcher.FindAll()
 
-            foreach ($Result in $Results) {
-                $User = $Result.Properties
-                $Users += [PSCustomObject]@{
-                    SamAccountName        = $User["samaccountname"] | Select-Object -First 1
-                    whenCreated           = $User["whencreated"] | Select-Object -First 1
-                    MemberOf              = $User["memberof"]
-                    Name                  = $User["name"] | Select-Object -First 1
-                    UserPrincipalName     = $User["userprincipalname"] | Select-Object -First 1
-                    Description           = $User["description"] | Select-Object -First 1
-                    createTimeStamp       = $User["createtimestamp"] | Select-Object -First 1
-                    DistinguishedName     = $User["distinguishedname"] | Select-Object -First 1
-                    Created               = $User["whencreated"] | Select-Object -First 1
-                    pwdLastSet            = ([datetime]::FromFileTimeUTC($User["pwdlastset"][0])) 
-                    whenChanged           = $User["whenchanged"] | Select-Object -First 1
-                    LastLogonDate         = if ($User["lastlogontimestamp"]) { [datetime]::FromFileTimeUTC($User["lastlogontimestamp"][0]) } else { $null }
-                    PasswordNotRequired   = ([bool]($User["useraccountcontrol"][0] -band 0x20))
-                    PasswordNeverExpires  = ([bool]($User["useraccountcontrol"][0] -band 0x10000))
-                    PasswordLastSet       = ([datetime]::FromFileTimeUTC($User["pwdlastset"][0]))
-                    SmartcardLogonRequired = ([bool]($User["useraccountcontrol"][0] -band 0x40000))
-                    Enabled = if (($User["useraccountcontrol"][0] -band 0x2) -eq 0x2) { "False" } else { "True" }
-                }
-            } #$Users
+foreach ($Result in $Results) {
+    $User = $Result.Properties
+    $Users += [PSCustomObject]@{
+        SamAccountName        = $User["samaccountname"] | Select-Object -First 1
+        whenCreated           = $User["whencreated"] | Select-Object -First 1
+        MemberOf              = $User["memberof"]
+        Name                  = $User["name"] | Select-Object -First 1
+        UserPrincipalName     = $User["userprincipalname"] | Select-Object -First 1
+        Description           = $User["description"] | Select-Object -First 1
+        createTimeStamp       = $User["createtimestamp"] | Select-Object -First 1
+        DistinguishedName     = $User["distinguishedname"] | Select-Object -First 1
+        Created               = $User["whencreated"] | Select-Object -First 1
+        pwdLastSet            = ([datetime]::FromFileTimeUTC($User["pwdlastset"][0])) 
+        whenChanged           = $User["whenchanged"] | Select-Object -First 1
+        LastLogonDate         = if ($User["lastlogontimestamp"]) { [datetime]::FromFileTimeUTC($User["lastlogontimestamp"][0]) } else { $null }
+        PasswordNotRequired   = ([bool]($User["useraccountcontrol"][0] -band 0x20))
+        PasswordNeverExpires  = ([bool]($User["useraccountcontrol"][0] -band 0x10000))
+        PasswordLastSet       = ([datetime]::FromFileTimeUTC($User["pwdlastset"][0]))
+        SmartcardLogonRequired = ([bool]($User["useraccountcontrol"][0] -band 0x40000))
+        Enabled = if (($User["useraccountcontrol"][0] -band 0x2) -eq 0x2) { "False" } else { "True" }
+    }
+}
 
             Write-Verbose -Message 'Start gathering groups'
             $GroupSearcher = New-Object -TypeName System.DirectoryServices.DirectorySearcher
@@ -883,7 +927,7 @@ function ArtifactCollector {
         } #if ($HypervHosts)
         ### endregion Hyper-V ###
 
-        ### region NTP ###
+        ### region NTP ###     
         $DirName = 'NTP'
 
         Write-Verbose -Message 'Gathering Time Servers to Check'
@@ -1036,13 +1080,11 @@ function ArtifactCollector {
         } | Export-Clixml -Path .\Baseline.xml
         ### endregion Baseline ###
 
+        # Copy ArtifactCollectorWarnings.log to the artifact directory
         $WarningsLogPath = "$env:USERPROFILE\Downloads\ArtifactCollectorWarnings.log"
-
         # Copy the log file if it exists
         if (Test-Path $WarningsLogPath) {
-
-            Copy-Item -Path $WarningsLogPath -Destination $ArtifactDir -Force
-
+        Copy-Item -Path $WarningsLogPath -Destination $ArtifactDir -Force
         }
 
         ### region ZIP ###
