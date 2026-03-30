@@ -145,7 +145,7 @@ function ArtifactCollector {
         $DomainJoined = $ComputerSystem.PartOfDomain
         ### endregion Prep ###
 
-    ### SUB-DOMAIN WARNING CHECK – MUST RUN FROM FOREST ROOT FOR BEST RESULTS ###
+    ### SUB-DOMAIN WARNING CHECK – MUST RUN FROM FOREST ROOT FOR BEST RESULTS
 
     try {
         # Current domain the computer is joined to
@@ -264,6 +264,10 @@ $WebHosting = foreach ($Server in $Servers) {
 }
 
 # $WebHosting
+
+# Step 3 Collect Fine Grained Password Policies
+$FGPP = Get-ADFineGrainedPasswordPolicy -Filter *    
+# $FGPP
 
 
             Write-Verbose -Message 'Get a list of DHCP servers from ActiveDirectory'
@@ -568,6 +572,7 @@ foreach ($Result in $Results) {
                 GroupPolicies = $GroupPolicies
                 OUs = $OUs
                 WebHosting = $WebHosting
+                FGPP = $FGPP
             }
 
             $AdInfo | Export-Clixml -Path .\ActiveDirectory.xml
