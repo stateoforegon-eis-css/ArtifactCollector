@@ -265,8 +265,11 @@ $WebHosting = foreach ($Server in $Servers) {
 
 # $WebHosting
 
-# Step 3 Collect Fine Grained Password Policies
-$FGPP = Get-ADFineGrainedPasswordPolicy -Filter *    
+# Step 3 Check for Fine Grained Password Policies
+$DirName = 'ActiveDirectory'
+New-Item -Path .\$DirName -ItemType Directory | Out-Null
+$FGPP = Get-ADFineGrainedPasswordPolicy -Filter *
+$FGPP | Out-File -FilePath .\$DirName\FineGrainedPasswordPolicies.txt
 # $FGPP
 
 
@@ -575,7 +578,7 @@ foreach ($Result in $Results) {
                 FGPP = $FGPP
             }
 
-            $AdInfo | Export-Clixml -Path .\ActiveDirectory.xml
+            $AdInfo | Export-Clixml -Path .\ActiveDirectory\ActiveDirectory.xml
 
             Write-Verbose -Message 'Gather logs from DCs'
             $DCs = $AdInfo.DomainControllers.Name
@@ -1082,7 +1085,7 @@ foreach ($Result in $Results) {
             NetNeighbors = $NetNeighbors
             AppLockerPolicy = [string]$AppLockerPolicy
             ScheduledTasks = $ScheduledTasks
-        } | Export-Clixml -Path .\Baseline.xml
+        } | Export-Clixml -Path .\ActiveDirectory\Baseline.xml
         ### endregion Baseline ###
 
         # Copy ArtifactCollectorWarnings.log to the artifact directory
